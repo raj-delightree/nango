@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import braintree from 'braintree';
 import qs from 'qs';
 
@@ -38,6 +40,7 @@ class ProviderClient {
             case 'figma':
             case 'figjam':
             case 'facebook':
+            case 'followupboss':
             case 'instagram':
             case 'jobber':
             case 'microsoft-admin':
@@ -57,6 +60,7 @@ class ProviderClient {
             case 'clover':
             case 'absorb-lms':
             case 'posthog-oauth':
+            case 'walmart':
             case 'slack':
                 return true;
             default:
@@ -84,7 +88,8 @@ class ProviderClient {
         code: string,
         callBackUrl: string,
         codeVerifier: string,
-        connectionConfig?: Record<string, string>
+        connectionConfig?: Record<string, string>,
+        state?: string
     ): Promise<object> {
         switch (config.provider) {
             case 'braintree':
@@ -98,6 +103,8 @@ class ProviderClient {
             case 'figma':
             case 'figjam':
                 return this.createFigmaToken(tokenUrl, code, config.oauth_client_id, config.oauth_client_secret, callBackUrl);
+            case 'followupboss':
+                return this.createFollowupbossToken(tokenUrl, code, config.oauth_client_id, config.oauth_client_secret, callBackUrl, state);
             case 'jobber':
                 return this.createJobberToken(tokenUrl, code, config.oauth_client_id, config.oauth_client_secret);
             case 'facebook':
@@ -144,6 +151,11 @@ class ProviderClient {
                 );
             case 'posthog-oauth':
                 return this.createPosthogOauthToken(tokenUrl, code, config.oauth_client_id, callBackUrl, codeVerifier);
+            case 'walmart': {
+                const sellerId = connectionConfig?.['sellerId'];
+                if (!sellerId) throw new NangoError('missing_walmart_seller_id');
+                return this.createWalmartToken(tokenUrl, code, config.oauth_client_id, config.oauth_client_secret, callBackUrl, sellerId);
+            }
             case 'slack':
                 return this.createSlackToken(
                     tokenUrl,
@@ -196,6 +208,8 @@ class ProviderClient {
             case 'figma':
             case 'figjam':
                 return this.refreshFigmaToken(provider.refresh_url as string, credentials.refresh_token!, config.oauth_client_id, config.oauth_client_secret);
+            case 'followupboss':
+                return this.refreshFollowupbossToken(interpolatedTokenUrl.href, credentials.refresh_token!, config.oauth_client_id, config.oauth_client_secret);
             case 'jobber':
                 return this.refreshJobberToken(provider.token_url as string, credentials.refresh_token!, config.oauth_client_id, config.oauth_client_secret);
             case 'facebook':
@@ -267,6 +281,17 @@ class ProviderClient {
                 );
             case 'posthog-oauth':
                 return this.refreshPosthogOauthToken(interpolatedTokenUrl.href, credentials.refresh_token!, config.oauth_client_id);
+            case 'walmart': {
+                const sellerId = connection.connection_config['sellerId'];
+                if (!sellerId) throw new NangoError('missing_walmart_seller_id');
+                return this.refreshWalmartToken(
+                    interpolatedTokenUrl.href,
+                    credentials.refresh_token!,
+                    config.oauth_client_id,
+                    config.oauth_client_secret,
+                    sellerId
+                );
+            }
             case 'slack':
                 return this.refreshSlackToken(
                     interpolatedTokenUrl.href,
@@ -398,6 +423,52 @@ class ProviderClient {
             throw new NangoError('tiktok_token_request_error');
         } catch (err: any) {
             throw new NangoError('tiktok_token_request_error', err.message);
+        }
+    }
+
+    private async createFollowupbossToken(
+        tokenUrl: string,
+        code: string,
+        clientId: string,
+        clientSecret: string,
+        redirectUri: string,
+        state?: string
+    ): Promise<object> {
+        const body: Record<string, string> = {
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: redirectUri
+        };
+        if (state) {
+            body['state'] = state;
+        }
+        const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+        try {
+            const response = await axios.post(tokenUrl, qs.stringify(body), {
+                headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            if (response.status === 200 && response.data) {
+                return response.data;
+            }
+            throw new NangoError('followupboss_token_request_error', response.data);
+        } catch (err: any) {
+            throw new NangoError('followupboss_token_request_error', stringifyError(err));
+        }
+    }
+
+    private async refreshFollowupbossToken(tokenUrl: string, refreshToken: string, clientId: string, clientSecret: string): Promise<RefreshTokenResponse> {
+        const body = { grant_type: 'refresh_token', refresh_token: refreshToken };
+        const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+        try {
+            const response = await axios.post(tokenUrl, qs.stringify(body), {
+                headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            if (response.status === 200 && response.data) {
+                return response.data;
+            }
+            throw new NangoError('followupboss_refresh_token_request_error', response.data);
+        } catch (err: any) {
+            throw new NangoError('followupboss_refresh_token_request_error', stringifyError(err));
         }
     }
 
@@ -1383,6 +1454,66 @@ class ProviderClient {
             throw new NangoError('posthog_oauth_refresh_token_request_error');
         } catch (err: any) {
             throw new NangoError('posthog_oauth_refresh_token_request_error', stringifyError(err));
+        }
+    }
+
+    private walmartHeaders(clientId: string, clientSecret: string, sellerId: string): Record<string, string> {
+        return {
+            Authorization: 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64'),
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'WM_SVC.name': 'Walmart Marketplace',
+            'WM_QOS.CORRELATION_ID': randomUUID(),
+            'WM_PARTNER.id': sellerId
+        };
+    }
+
+    private async createWalmartToken(
+        tokenUrl: string,
+        code: string,
+        clientId: string,
+        clientSecret: string,
+        redirectUri: string,
+        sellerId: string
+    ): Promise<AuthorizationTokenResponse> {
+        try {
+            const body = new URLSearchParams({
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: redirectUri
+            });
+
+            const response = await axios.post(tokenUrl, body.toString(), { headers: this.walmartHeaders(clientId, clientSecret, sellerId) });
+
+            if (response.status === 200 && response.data) {
+                return response.data;
+            }
+            throw new NangoError('request_token_external_error', response.data);
+        } catch (err: any) {
+            throw new NangoError('request_token_external_error', stringifyError(err));
+        }
+    }
+
+    private async refreshWalmartToken(
+        tokenUrl: string,
+        refreshToken: string,
+        clientId: string,
+        clientSecret: string,
+        sellerId: string
+    ): Promise<RefreshTokenResponse> {
+        try {
+            const body = new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken
+            });
+
+            const response = await axios.post(tokenUrl, body.toString(), { headers: this.walmartHeaders(clientId, clientSecret, sellerId) });
+
+            if (response.status === 200 && response.data) {
+                return { ...response.data, refresh_token: refreshToken };
+            }
+            throw new NangoError('refresh_token_external_error', response.data);
+        } catch (err: any) {
+            throw new NangoError('refresh_token_external_error', stringifyError(err));
         }
     }
 

@@ -1,11 +1,11 @@
-import { ChevronRightIcon } from '@radix-ui/react-icons';
+import { ChevronRight } from 'lucide-react';
 
 import { OperationTag } from './components/OperationTag';
 import { ProviderTag } from './components/ProviderTag';
 import { StatusTag } from './components/StatusTag';
 import { formatDateToLogFormat, getRunTime } from '../../utils/utils';
 
-import type { FilterOption } from '../../components-v2/patterns/FilterMultiSelect';
+import type { FilterOption } from '../../components/patterns/FilterMultiSelect';
 import type { SearchOperationsData, SearchOperationsState, SearchOperationsType } from '@nangohq/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -82,7 +82,7 @@ export const columns: ColumnDef<SearchOperationsData>[] = [
         cell: () => {
             return (
                 <div className="-ml-2">
-                    <ChevronRightIcon />
+                    <ChevronRight size={16} />
                 </div>
             );
         }
