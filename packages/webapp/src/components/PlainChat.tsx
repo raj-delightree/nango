@@ -1,7 +1,7 @@
 import { ArrowUpIcon, BookOpenIcon, ExternalLinkIcon, MessageSquareIcon, SparklesIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { Spinner } from '@/components-v2/ui/Spinner';
+import { Spinner } from '@/components/ui/Spinner';
 import { apiFetch } from '@/utils/api';
 import { globalEnv } from '@/utils/env';
 import { cn } from '@/utils/utils';
