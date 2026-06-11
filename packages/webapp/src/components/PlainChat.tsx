@@ -15,18 +15,70 @@ declare global {
         Plain?: {
             init: (config: PlainConfig) => void;
             update: (config: Partial<PlainConfig>) => void;
+            setCustomerDetails: (details: PlainCustomerDetails) => void;
             open: () => void;
+            close: () => void;
+            onOpen: (cb: () => void) => () => void;
+            onClose: (cb: () => void) => () => void;
+            isInitialized: () => boolean;
+            exportDebugLogs: () => string[];
         };
     }
 }
+
+type PlainIcon =
+    | 'bell'
+    | 'book'
+    | 'bug'
+    | 'bulb'
+    | 'chat'
+    | 'integration'
+    | 'discord'
+    | 'discord_muted'
+    | 'email'
+    | 'slack'
+    | 'slack_muted'
+    | 'link'
+    | 'pencil'
+    | 'send'
+    | 'support'
+    | 'error';
 
 interface PlainColorPair {
     light: string;
     dark: string;
 }
 
+interface PlainThreadDetails {
+    labelTypeIds?: string[];
+    priority?: 1 | 2 | 3 | 4;
+    tierIdentifier?: { tierId: string } | { externalId: string };
+    tenantIdentifier?: { tenantId: string } | { externalId: string };
+    externalId?: string;
+}
+
+interface PlainFormField {
+    type: 'dropdown';
+    placeholder?: string;
+    options: { icon?: PlainIcon; text: string; threadDetails?: PlainThreadDetails }[];
+}
+
+interface PlainChatButton {
+    icon?: PlainIcon;
+    text: string;
+    threadDetails?: PlainThreadDetails;
+    form?: { fields: PlainFormField[] };
+}
+
+interface PlainCustomerDetails {
+    email: string;
+    emailHash?: string;
+    fullName: string;
+}
+
 interface PlainConfig {
     appId: string;
+    hideLauncher?: boolean;
     theme?: 'light' | 'dark' | 'auto';
     style?: {
         brandColor?: string | PlainColorPair;
@@ -34,12 +86,15 @@ interface PlainConfig {
         launcherBackgroundColor?: string | PlainColorPair;
         launcherIconColor?: string | PlainColorPair;
     };
-    logo?: { url: string; alt: string };
-    links?: { icon: string; text: string; url: string }[];
-    chatButtons?: { icon: string; text: string; threadDetails: object }[];
+    logo?: { url: string; alt?: string };
+    links?: { icon?: PlainIcon; text: string; url: string }[];
+    entryPoint?: { type: 'default' | 'chat'; externalId?: string; singleChatMode?: boolean };
+    embedAt?: Element;
     hideBranding?: boolean;
     position?: { right?: string; bottom?: string; zIndex?: string };
-    customerDetails?: { email: string; emailHash?: string; fullName: string };
+    threadDetails?: PlainThreadDetails;
+    chatButtons?: PlainChatButton[];
+    customerDetails?: PlainCustomerDetails;
     requireAuthentication?: boolean;
 }
 
@@ -61,7 +116,7 @@ function buildConfig(appId: string, user?: ApiUser, emailHash?: string): PlainCo
         },
         links: [
             { icon: 'book', text: 'View docs', url: 'https://docs.nango.dev' },
-            { icon: 'discord_muted', text: 'Join our Slack', url: 'https://nango.dev/slack' }
+            { icon: 'slack', text: 'Join our Slack', url: 'https://nango.dev/slack' }
         ],
         chatButtons: [
             { icon: 'chat', text: 'Ask a question', threadDetails: {} },
