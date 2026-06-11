@@ -1,9 +1,11 @@
 import path from 'path';
 
+import cors from 'cors';
 import express from 'express';
 
 import { errorManager } from '@nangohq/shared';
 
+import { getDocsSearch } from './controllers/plain/getDocsSearch.js';
 import { getEnvJs } from './controllers/v1/getEnvJs.js';
 import { getProvidersJSON } from './controllers/v1/getProvidersJSON.js';
 import { rateLimiterMiddleware } from './middleware/ratelimit.middleware.js';
@@ -29,6 +31,9 @@ router.get('/health', (_, res) => {
 router.get('/ready', getReady);
 router.get('/env.js', getEnvJs);
 router.get('/providers.json', rateLimiterMiddleware, getProvidersJSON);
+const docsCors = cors({ origin: ['https://app.nango.dev', 'https://app-development.nango.dev', 'https://app-staging.nango.dev', /^http:\/\/localhost:\d+$/] });
+router.options('/docs-search', docsCors);
+router.get('/docs-search', docsCors, rateLimiterMiddleware, getDocsSearch);
 
 // Import main routers
 // Order is important because public API has no prefix
