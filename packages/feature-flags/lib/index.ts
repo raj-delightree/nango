@@ -14,14 +14,51 @@ export { FLAGS, type FlagKey } from './registry.js';
 
 let clientPromise: Promise<FeatureFlagsClient> | undefined;
 let destroyPromise: Promise<void> | undefined;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
 const logger = getLogger('FeatureFlags');
+
+function cancelReconnect(): void {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+    }
+}
+
+function scheduleReconnect(): void {
+    if (reconnectTimer) return;
+    if (envs.NANGO_FLAG_PROVIDER !== 'unleash' || !envs.NANGO_UNLEASH_URL) return;
+
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        if (clientPromise || destroyPromise) return;
+        void getFeatureFlagsClient()
+            .then(() => {
+                logger.info('Feature flags client reconnected to Unleash');
+            })
+            .catch(() => {
+                scheduleReconnect();
+            });
+    }, envs.NANGO_UNLEASH_REFRESH_INTERVAL_MS);
+    if (typeof reconnectTimer.unref === 'function') {
+        reconnectTimer.unref();
+    }
+}
 
 export async function getFeatureFlagsClient(): Promise<FeatureFlagsClient> {
     if (destroyPromise) await destroyPromise;
     if (clientPromise) return clientPromise;
-    clientPromise = createClient();
-    clientPromise.catch((err: unknown) => logger.error('Error creating feature flags client', err));
+    clientPromise = createClient()
+        .then((client) => {
+            cancelReconnect();
+            return client;
+        })
+        .catch((err: unknown) => {
+            clientPromise = undefined;
+            logger.error('Error creating feature flags client', err);
+            scheduleReconnect();
+            throw err;
+        });
     return clientPromise;
 }
 
@@ -37,6 +74,7 @@ export async function destroy(): Promise<void> {
         } finally {
             clientPromise = undefined;
             destroyPromise = undefined;
+            cancelReconnect();
         }
     })();
     return destroyPromise;
